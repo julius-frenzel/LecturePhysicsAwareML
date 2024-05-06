@@ -1,15 +1,14 @@
 import numpy as np
+import time
 
 
-# evaluate polynomial at a given point
+
+# evaluate polynomial at a given point using Horner's method
 def poly_eval(coeffs, point):
-    #print(coeffs)
-    val = 0
-    mon_val = 1 # value of monomial
-    for coeff in coeffs:
-        val += coeff*mon_val
-        mon_val *= point
-    return val
+    result = coeffs[-1]
+    for i in range(len(coeffs)-2,-1,-1):
+        result = result * point + coeffs[i]
+    return result
 
 
 # compute the coefficients for the derivation of a polynomial
@@ -29,7 +28,7 @@ cached_degree = None
 cached_bounds = None
 
 # compute the integral of a given integrant over given bounds using Gauss-Legendre quadrature
-def quad(integrant, bounds, degree=3):
+def quad(integrant, bounds, degree=5):
     # computing the points and weights for Gauss-Legendre quadrature takes too long to do every time the function is called, therefore they are cached
     global cached_points, cached_weights, cached_degree, cached_bounds
     if not degree == cached_degree:
@@ -42,7 +41,8 @@ def quad(integrant, bounds, degree=3):
         cached_weights = 0.5*cached_weights*(bounds[1] - bounds[0])
         
     # compute approximation of the integral
-    int_val = 0
+    result = 0
     for point, weight in zip(cached_points, cached_weights):
-        int_val += weight*integrant(point)
-    return int_val
+        result += weight*integrant(point)
+
+    return result
