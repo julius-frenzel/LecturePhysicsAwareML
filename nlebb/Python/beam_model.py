@@ -251,7 +251,7 @@ def get_force_vector_w(coeffs_u, coeffs_w, approx, domain):
 
 
 # right hand side for u
-def get_rhs_u(approx, domain):
+def get_rhs_u(approx, domain, t=0):
     #print("assembling rhs")
     b = np.zeros((approx.coeffs_len,))
     for e in range(domain["num_elements"]):
@@ -283,8 +283,8 @@ def get_rhs_u(approx, domain):
                     bc_test_val = poly_eval(H_test, boundary_pos)
                     b[basis_index_global] = domain["u"][0]*bc_test_val
                     replace_row |= abs(bc_test_val) > 0
-                    if abs(bc_test_val) > 0:
-                        print(f"element {e+1}, pinned, boundary_index={boundary_index}")
+                    #if abs(bc_test_val) > 0:
+                    #    print(f"element {e+1}, pinned, boundary_index={boundary_index}")
                 elif domain["boundary_conds"][boundary_index] == 4: # clamped (equivalent to pinned in horizontal direction for u)
                     bc_test_val = poly_eval(H_test, boundary_pos)
                     b[basis_index_global] = domain["u"][0]*bc_test_val
@@ -293,13 +293,16 @@ def get_rhs_u(approx, domain):
             # inner element
             if not replace_row:
                 # apply discrete loads
-                for load_index, load_point in enumerate(domain["load_points"]):
+                load_points = domain["load_points"](t)
+                axial_forces = domain["N"](t)
+                specific_axial_force = lambda x: domain["f"](t, x)
+                for load_index, load_point in enumerate(load_points):
                     if (load_point > left_boundary or boundary_index == 0) and load_point <= right_boundary:
-                        b[basis_index_global] += domain["N"][load_index]*poly_eval(H_test, x_local(load_point))
+                        b[basis_index_global] += axial_forces[load_index]*poly_eval(H_test, x_local(load_point))
                 # apply specific axial force
                 element_scale = (domain["element_boundaries"][e + 1] - domain["element_boundaries"][e])
                 point_global = lambda point_local: domain["element_boundaries"][e] + point_local*element_scale
-                b[basis_index_global] += quad(lambda point: domain["f"](point_global(point))*poly_eval(H_test, point), [0, 1])*element_scale
+                b[basis_index_global] += quad(lambda point: specific_axial_force(point_global(point))*poly_eval(H_test, point), [0, 1])*element_scale
                 #print("normal or free")
                 
     #print(f"b={b}")
@@ -307,7 +310,7 @@ def get_rhs_u(approx, domain):
 
 
 # right hand side for w
-def get_rhs_w(approx, domain):
+def get_rhs_w(approx, domain, t=0):
     #print("assembling rhs")
     b = np.zeros((approx.coeffs_len,))
     for e in range(domain["num_elements"]):
@@ -353,15 +356,20 @@ def get_rhs_w(approx, domain):
             # inner element
             if not replace_row:
                 # apply discrete loads
-                for load_index, load_point in enumerate(domain["load_points"]):
+                load_points = domain["load_points"](t)
+                lateral_forces = domain["Q"](t)
+                #print(f"lateral forces: {lateral_forces}")
+                moments = domain["M"](t)
+                specific_lateral_force = lambda x: domain["q"](t, x)
+                for load_index, load_point in enumerate(load_points):
                     if (load_point > left_boundary or boundary_index == 0) and load_point <= right_boundary:
-                        b[basis_index_global] += domain["Q"][load_index]*poly_eval(H_test, x_local(load_point))
+                        b[basis_index_global] += lateral_forces[load_index]*poly_eval(H_test, x_local(load_point))
                         H_test_x = approx.basis[test_index_local]["f_x"]
-                        b[basis_index_global] += domain["M"][load_index]*poly_eval(H_test_x, x_local(load_point))/element_scale
+                        b[basis_index_global] -= moments[load_index]*poly_eval(H_test_x, x_local(load_point))/element_scale
                 # apply specific lateral force
                 element_scale = (domain["element_boundaries"][e + 1] - domain["element_boundaries"][e])
                 point_global = lambda point_local: domain["element_boundaries"][e] + point_local*element_scale
-                b[basis_index_global] += quad(lambda point: domain["q"](point_global(point))*poly_eval(H_test, point), [0, 1])*element_scale
+                b[basis_index_global] += quad(lambda point: specific_lateral_force(point_global(point))*poly_eval(H_test, point), [0, 1])*element_scale
                 #print("normal or free")
                 
     logger.debug(f"b={b}")

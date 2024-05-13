@@ -1,9 +1,10 @@
 import numpy as np
-from helper import poly_eval, poly_der
+from helper import poly_eval, poly_der, quad
 from newtons_method import newton
 from newmark_method import newmark
 from beam_model import get_mass_matrix_u, get_mass_matrix_w, get_force_vector_u, get_force_vector_w, get_rhs_u, get_rhs_w
 import scipy
+from scipy.optimize import root
 import logging
 import scipy
 import time
@@ -22,32 +23,35 @@ class GalerkinApproximation():
         self.coeffs_per_element = len(self.basis)
         
         self.coeffs_len = (domain["num_elements"] + 1)*int(len(self.basis)/2) # length of the vector of coefficients, which describes the solution
-        self.results = {"t": np.zeros((1,)), "u": np.zeros((1, self.coeffs_len))}
         
     
-    def solve_static(self):
+    def solve_static(self, t=0):
         t_start = time.time()
         # assemble right hand side
-        b = np.concatenate([get_rhs_u(self, self.domain),
-                            get_rhs_w(self, self.domain)])
+        b = np.concatenate([get_rhs_u(self, self.domain, t),
+                            get_rhs_w(self, self.domain, t)])
         # function for assembling force vector
         force_vector = lambda coeffs_u, coeffs_w: np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
                                                                   get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
         # define residual
         residual = lambda coeffs: force_vector(coeffs[:self.coeffs_len], coeffs[self.coeffs_len:]) - b
         # solve problem
-        result = newton(residual, np.zeros((2*self.coeffs_len,)), tol=1e-5, maxiter=10) # own implementation (slower)
-        #result = root(residual, np.zeros((2*self.coeffs_len,)), method="hybr", tol=1e-5, options={"maxfev": 1000})["x"] # solver from scipy (faster)
+        #result = newton(residual, np.zeros((2*self.coeffs_len,)), tol=1e-5, maxiter=10) # own implementation (slower)
+        result = root(residual, np.zeros((2*self.coeffs_len,)), method="hybr", tol=1e-5, options={"maxfev": 1000})["x"] # solver from scipy (faster)
         # fomat results
         coeffs_u = result[:self.coeffs_len]
         coeffs_w = result[self.coeffs_len:]
-        self.results = {"t": np.zeros((1,)), "u": np.stack([coeffs_u]), "w": np.stack([coeffs_w])}
+        results = {"t": np.array([t]), "u": np.stack([coeffs_u]), "w": np.stack([coeffs_w])}
         
         logger.info(f"time for solving static problem: {time.time() - t_start:.2f}s")
         
-        return self.results
+        result = result.reshape(1,-1) # add time dimension for postprocessing
+        results.update(self.postprocessing({"x": result, "x_d": np.zeros_like(result), "x_dd": np.zeros_like(result)}, lambda t: b, np.array([t]), silent=True))
+        
+        return results
     
-    def solve_dynamic(self, t):
+    
+    def solve_dynamic(self, t, static_reference=False):
         t_start_dynamic_total = time.time()
         # assemble mass matrix
         M_u = get_mass_matrix_u(self, self.domain)
@@ -55,29 +59,49 @@ class GalerkinApproximation():
         M = np.block([[M_u,                     np.zeros_like(M_u)],
                       [np.zeros_like(M_w),      M_w]])
         # assemble right hand side
-        b = np.concatenate([get_rhs_u(self, self.domain),
-                            get_rhs_w(self, self.domain)])
+        b = lambda t: np.concatenate([get_rhs_u(self, self.domain, t),
+                            get_rhs_w(self, self.domain, t)])
         # function for assembling force vector
         force_vector = lambda coeffs_u, coeffs_w: np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
                                                                   get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
         # define residual
-        residual = lambda x_np1, x_d_np1, x_dd_np1: M@x_dd_np1 + force_vector(x_np1[:self.coeffs_len], x_np1[self.coeffs_len:]) - b
+        residual = lambda x_np1, x_d_np1, x_dd_np1, t: M@x_dd_np1 + force_vector(x_np1[:self.coeffs_len], x_np1[self.coeffs_len:]) - b(t)
         
         # perform time integration
         newmark_results = newmark(residual, t, x_0=np.zeros(2*self.coeffs_len), x_d_0=np.zeros(2*self.coeffs_len), x_dd_0=np.zeros(2*self.coeffs_len))
         # format results (split into u and w)
-        self.results = {"t": t, "u": newmark_results["x"][:,:self.coeffs_len], "w": newmark_results["x"][:,self.coeffs_len:]}
+        results_dynamic = {"t": t,
+                           "u": newmark_results["x"][:,:self.coeffs_len],
+                           "u_d": newmark_results["x_d"][:,:self.coeffs_len],
+                           "u_dd": newmark_results["x_dd"][:,:self.coeffs_len],
+                           "w": newmark_results["x"][:,self.coeffs_len:],
+                           "w_d": newmark_results["x_d"][:,self.coeffs_len:],
+                           "w_dd": newmark_results["x_dd"][:,self.coeffs_len:]}
 
         logger.info(f"time for solving dynamic problem: {time.time() - t_start_dynamic_total:.2f}s")
         
-        self.postprocessing()
+        # postprocessing for dynamic results
+        results_dynamic.update(self.postprocessing(newmark_results, b, t))
         
-        return self.results
-    
+        logger.info("computing static reference solutions")
+        results_static = dict()
+        for t_i in t:
+            result_static = self.solve_static(t_i)
+            for key in result_static:
+                if not key in results_static:
+                    results_static[key] = [result_static[key]]
+                else:
+                    results_static[key].append(result_static[key])
+        results_static = {key: np.stack(results_static[key]) for key in results_static}
+        
+        
+        
+        return results_dynamic, results_static
     
     
     def eval_solution(self, coeffs, eval_points):
         y = np.zeros_like(eval_points)
+        coeffs = coeffs.squeeze()
         
         for e in range(self.domain["num_elements"]): # loop over elements
             left_boundary = self.domain["element_boundaries"][e]
@@ -93,75 +117,61 @@ class GalerkinApproximation():
         
         return y
     
-    
-    def postprocessing(self):
+    def postprocessing(self, results, b, t, silent=False):
         """compute external work, kinetic energies and internal energies from given trajectories, the mass matrix and the right hand side"""
         t_start = time.time()
         
-        u = self.results["u"]
-        w = self.results["w"]
-        t = self.results["t"]
+        results_post = dict()
+        #is_dynamic = len(results["u"]) > 1 # determine, whether there is more than one set of coefficients in the results
         
         # assemble mass matrix
         M_u = get_mass_matrix_u(self, self.domain)
         M_w = get_mass_matrix_w(self, self.domain)
         M = np.block([[M_u,                     np.zeros_like(M_u)],
                       [np.zeros_like(M_w),      M_w]])
-        # assemble right hand side
-        b = np.concatenate([get_rhs_u(self, self.domain),
-                            get_rhs_w(self, self.domain)])
         
-        
-        logger.info("performing postprocessing")
+        if not silent:
+            logger.info("performing postprocessing")
         
         # external work
-        states = np.concatenate([u, w], axis=1)
-        ext_work = []
-        for state in states:
-            ext_work.append(state.transpose()@b)
-        ext_work = np.stack(ext_work)
+        states = results["x"]
+        states_d = results["x_d"]
+        states_dd = results["x_dd"]
+        ext_work = [states[0].transpose()@b(t[0])] # assume constant load starting from zero state before the start of the simulation
+        printed_info = False
+        for i in range(1, len(states)):
+            t_prev = t[i - 1]
+            t_next = t[i]
+            x_d_prev = states_d[i-1]
+            x_d_next = states_d[i]
+            x_dd_prev = states_dd[i-1]
+            x_dd_next = states_dd[i]
+            # derivatives assuming linear acceleratios
+            x_d = lambda t: x_d_prev + (x_dd_prev - (x_dd_next - x_dd_prev)*t_prev/(t_next - t_prev))*(t - t_prev) + (x_dd_next - x_dd_prev)/2*(t**2 - t_prev**2)/(t_next - t_prev)
+            #check whether results are consistent using x_d_next and fall back to constant accelerations, if necessary
+            der_diff = x_d_next - x_d(t_next)
+            if (np.abs(der_diff) > 1e-10).any():
+                if not printed_info:
+                    logger.info("Inconsistent results with assumption of linear accelerations. Falling back to constant accelerations for computing external work.")
+                    printed_info = True
+                x_d = lambda t: x_d_prev + (x_d_next - x_d_prev)*(t - t_prev)/(t_next - t_prev)
+            ext_work.append(ext_work[-1] + quad(lambda t: x_d(t).transpose()@b(t), [t_prev, t_next]))
+        results_post["W_ext"] = np.stack(ext_work)
         
         
         # kinetic energies
-        u_d = np.gradient(u, np.diff(t)[0], axis=0)
-        w_d = np.gradient(w, np.diff(t)[0], axis=0)
-        states_d = np.concatenate([u_d, w_d], axis=1)
         kin_energy = []
         for state_d in states_d:
             kin_energy.append(1/2*state_d.transpose()@M@state_d)
-        kin_energy = np.stack(kin_energy)
-        
+        results_post["E_k"] = np.stack(kin_energy)
         
         # internal energies
-        int_energy = ext_work - kin_energy
+        results_post["W_i"] = results_post["W_ext"] - results_post["E_k"]
         
-        logger.info(f"postprocessing took {time.time() - t_start}")
+        if not silent:
+            logger.info(f"postprocessing took {time.time() - t_start:.2f}s")
         
-        # visualize external work
-        fig, ax = plt.subplots()
-        ax.plot(t, ext_work)
-        ax.set_xlabel("time in s")
-        ax.set_ylabel("external work in J")
-        ax.grid(True)
-        plt.pause(1e-1)
-        
-        # visualize kinetic energies
-        fig, ax = plt.subplots()
-        ax.plot(t, kin_energy)
-        ax.set_xlabel("time in s")
-        ax.set_ylabel("kinetic energy in J")
-        ax.grid(True)
-        plt.pause(1e-1)
-        
-        # visualize internal energies
-        fig, ax = plt.subplots()
-        ax.plot(t, int_energy)
-        ax.set_xlabel("time in s")
-        ax.set_ylabel("internal energy in J")
-        ax.grid(True)
-        plt.pause(1e-1)
-        
-        return ext_work, kin_energy, int_energy
+        return results_post
 
 
 
