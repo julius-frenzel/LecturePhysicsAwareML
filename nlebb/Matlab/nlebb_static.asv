@@ -29,13 +29,13 @@ BC0 = 3;            % x=0
 BC1 = 0;            % x=L
 
 % Axial & transversal line load [N/m]
-load_f = 1e-2;
-load_q = 1e-2; %-9.81*RA;
+load_f = 0;
+load_q = 0; %-9.81*RA;
 load = @(x) [load_f, load_q];               
 
 % Point forces at points [1,2,3,4]*L/4 [N]
-Nx = [0 0 0 0];
-Qz = [0 0 0 0];  
+Nx = [0 0 0 1e-2];
+Qz = [0 0 0 1e-2];  
 My = 0; %-2;                % Moment at x=L [Nm]
 
 % Number of finite elements
@@ -103,7 +103,7 @@ while (rn < rnMax && ru > eps && rr > eps)
     % Finite element assembly
     %u = u*0;
     %disp(size(u))
-    %u(18) = 1;
+    %u(20) = 1;
     %u(11) = 0;
     %disp(u)
     [f, b, K, ~, Wint, Wext] = nlebb_assemble(XX, XE, u, UE, param, load, femFlags);
@@ -135,9 +135,6 @@ while (rn < rnMax && ru > eps && rr > eps)
     %nlebbplots = nlebb_plot(nlebbplots,XX,XE,u,UE,5,2,rn);
 
 end
-
-%disp("u:")
-%disp(u)
 
 nlebbplots = nlebb_plot(nlebbplots,XX,XE,u,UE,5,2,rn);
 

@@ -81,10 +81,9 @@ for k = 1:qn
     
     % Integrand evaluation for element force vector
     if (flags(1))
-        %disp(strcat("u1=", num2str(u1)))
-        %disp(strcat("w1=", num2str(w1)))
+        %disp(w1);
         Fek(dofU) = EA * (u1 + 0.5 * w1^2) * H1';
-        Fek(dofW) = (EA * (w1 * u1 + 0.5 * w1^3)) * H1' ...
+        Fek(dofW) = 0*(EA * (w1 * u1 + 0.5 * w1^3)) * H1' ...
             + (EI * w2) * H2';
         Fe = Fe + qwJ * Fek;
     end

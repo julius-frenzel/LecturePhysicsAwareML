@@ -44,3 +44,26 @@ def quad(integrant, bounds, degree=5):
         result += weight*integrant(point)
 
     return result
+
+
+
+quad_points_untransformed, quad_weights_untransformed = np.polynomial.legendre.leggauss(deg=5)
+quad_points_untransformed = 0.5*(quad_points_untransformed + 1)
+quad_weights_untransformed = 0.5*quad_weights_untransformed
+
+# perform quadrature over the interval [0, 1], when the integrant has already been evaluated at the quadrature points
+def quad_evaluated(quad_values):
+    global quad_weights_untransformed
+    return np.dot(quad_values, quad_weights_untransformed)
+
+
+
+# checks whether the beam with given boundary conditions is statically determinate (assuming coupling between axial and lateral displacements)
+def check_determinacy(boundary_conds):
+    # number of degrees of freedom, which are eliminated by each boundary condition
+    dof_eliminated = [0, # free
+                      1, # pinned in vertical direction
+                      1, # pinned in horizontal direction
+                      2, # pinned in both directions
+                      3] # clamped
+    assert 3 - sum([dof_eliminated[bc] for bc in boundary_conds]) <= 0, "The beam isn't statically determinate with the given boundary conditions."

@@ -1,5 +1,5 @@
 import numpy as np
-from helper import poly_eval, poly_der, quad
+from helper import poly_eval, poly_der, quad, quad_points_untransformed
 from newtons_method import newton
 from newmark_method import newmark
 from beam_model import get_mass_matrix_u, get_mass_matrix_w, get_force_vector_u, get_force_vector_w, get_rhs_u, get_rhs_w
@@ -19,10 +19,15 @@ class GalerkinApproximation():
         self.domain = domain
         
         # precompute coefficients for the derivatives of the basis functions
-        self.basis = [{"f": poly_basis[i], "f_x": poly_der(poly_basis[i], 1), "f_xx": poly_der(poly_basis[i], 2)} for i in range(len(poly_basis))]
-        self.coeffs_per_element = len(self.basis)
+        self.basis_coeffs = [{"f": poly_basis[i], "f_x": poly_der(poly_basis[i], 1), "f_xx": poly_der(poly_basis[i], 2)} for i in range(len(poly_basis))]
+        self.basis_evaluated = []
+        for basis_coeffs in self.basis_coeffs:
+            self.basis_evaluated.append(dict())
+            for derivative in basis_coeffs:
+                self.basis_evaluated[-1][derivative] = np.array([poly_eval(basis_coeffs[derivative], point) for point in quad_points_untransformed])
         
-        self.coeffs_len = (domain["num_elements"] + 1)*int(len(self.basis)/2) # length of the vector of coefficients, which describes the solution
+        self.coeffs_per_element = len(self.basis_coeffs)
+        self.coeffs_len = (domain["num_elements"] + 1)*int(len(self.basis_coeffs)/2) # length of the vector of coefficients, which describes the solution
         
     
     def solve_static(self, t=0):
@@ -37,7 +42,7 @@ class GalerkinApproximation():
         residual = lambda coeffs: force_vector(coeffs[:self.coeffs_len], coeffs[self.coeffs_len:]) - b
         # solve problem
         #result = newton(residual, np.zeros((2*self.coeffs_len,)), tol=1e-5, maxiter=10) # own implementation (slower)
-        result = root(residual, np.zeros((2*self.coeffs_len,)), method="hybr", tol=1e-5, options={"maxfev": 1000})["x"] # solver from scipy (faster)
+        result = root(residual, np.zeros((2*self.coeffs_len,)), method="hybr", tol=1e-10, options={"maxfev": 1000})["x"] # solver from scipy (faster)
         # fomat results
         coeffs_u = result[:self.coeffs_len]
         coeffs_w = result[self.coeffs_len:]
@@ -113,7 +118,7 @@ class GalerkinApproximation():
                 index_global_left = e*int(self.coeffs_per_element/2) # global index for basis / test functions at the left side of the element
                 for basis_index_local in range(self.coeffs_per_element): # loop over basis functions
                     basis_index_global = index_global_left + basis_index_local
-                    y[point_index] += coeffs[basis_index_global].item()*poly_eval(self.basis[basis_index_local]["f"], point_local)
+                    y[point_index] += coeffs[basis_index_global].item()*poly_eval(self.basis_coeffs[basis_index_local]["f"], point_local)
         
         return y
     
