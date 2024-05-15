@@ -33,13 +33,13 @@ class GalerkinApproximation():
     def solve_static(self, t=0):
         t_start = time.time()
         # assemble right hand side
-        b = np.concatenate([get_rhs_u(self, self.domain, t),
-                            get_rhs_w(self, self.domain, t)])
+        b = lambda coeffs_u, coeffs_w: np.concatenate([get_rhs_u(coeffs_u, coeffs_w, self, self.domain, t),
+                                                       get_rhs_w(coeffs_u, coeffs_w, self, self.domain, t)])
         # function for assembling force vector
         force_vector = lambda coeffs_u, coeffs_w: np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
                                                                   get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
         # define residual
-        residual = lambda coeffs: force_vector(coeffs[:self.coeffs_len], coeffs[self.coeffs_len:]) - b
+        residual = lambda coeffs: force_vector(coeffs[:self.coeffs_len], coeffs[self.coeffs_len:]) - b(coeffs[:self.coeffs_len], coeffs[self.coeffs_len:])
         # solve problem
         #result = newton(residual, np.zeros((2*self.coeffs_len,)), tol=1e-5, maxiter=10) # own implementation (slower)
         result = root(residual, np.zeros((2*self.coeffs_len,)), method="hybr", tol=1e-10, options={"maxfev": 1000})["x"] # solver from scipy (faster)
@@ -51,7 +51,7 @@ class GalerkinApproximation():
         logger.info(f"time for solving static problem: {time.time() - t_start:.2f}s")
         
         result = result.reshape(1,-1) # add time dimension for postprocessing
-        results.update(self.postprocessing({"x": result, "x_d": np.zeros_like(result), "x_dd": np.zeros_like(result)}, lambda t: b, np.array([t]), silent=True))
+        results.update(self.postprocessing({"x": result, "x_d": np.zeros_like(result), "x_dd": np.zeros_like(result)}, lambda coeffs_u, coeffs_w, t: b(coeffs_u, coeffs_w), np.array([t]), silent=True))
         
         return results
     
@@ -64,13 +64,13 @@ class GalerkinApproximation():
         M = np.block([[M_u,                     np.zeros_like(M_u)],
                       [np.zeros_like(M_w),      M_w]])
         # assemble right hand side
-        b = lambda t: np.concatenate([get_rhs_u(self, self.domain, t),
-                            get_rhs_w(self, self.domain, t)])
+        b = lambda coeffs_u, coeffs_w, t: np.concatenate([get_rhs_u(coeffs_u, coeffs_w, self, self.domain, t),
+                                                          get_rhs_w(coeffs_u, coeffs_w, self, self.domain, t)])
         # function for assembling force vector
         force_vector = lambda coeffs_u, coeffs_w: np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
                                                                   get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
         # define residual
-        residual = lambda x_np1, x_d_np1, x_dd_np1, t: M@x_dd_np1 + force_vector(x_np1[:self.coeffs_len], x_np1[self.coeffs_len:]) - b(t)
+        residual = lambda x_np1, x_d_np1, x_dd_np1, t: M@x_dd_np1 + force_vector(x_np1[:self.coeffs_len], x_np1[self.coeffs_len:]) - b(x_np1[:self.coeffs_len], x_np1[self.coeffs_len:], t)
         
         # perform time integration
         newmark_results = newmark(residual, t, x_0=np.zeros(2*self.coeffs_len), x_d_0=np.zeros(2*self.coeffs_len), x_dd_0=np.zeros(2*self.coeffs_len))
@@ -104,13 +104,14 @@ class GalerkinApproximation():
         return results_dynamic, results_static
     
     
-    def eval_solution(self, coeffs, eval_points):
+    def eval_solution(self, coeffs, eval_points, derivative="f"):
         y = np.zeros_like(eval_points)
         coeffs = coeffs.squeeze()
         
         for e in range(self.domain["num_elements"]): # loop over elements
             left_boundary = self.domain["element_boundaries"][e]
             right_boundary = self.domain["element_boundaries"][e+1]
+            element_scale = right_boundary - left_boundary
             point_mask = np.argwhere(np.logical_and(eval_points >= left_boundary, eval_points <= right_boundary))
             for point_index in point_mask: # loop over points on the element
                 y[point_index] = 0 # points on the boundaries between elements are evaluated twice to avoid more complex logic, therefore the elements have to be reset to zero before (re-)evaluation
@@ -118,7 +119,12 @@ class GalerkinApproximation():
                 index_global_left = e*int(self.coeffs_per_element/2) # global index for basis / test functions at the left side of the element
                 for basis_index_local in range(self.coeffs_per_element): # loop over basis functions
                     basis_index_global = index_global_left + basis_index_local
-                    y[point_index] += coeffs[basis_index_global].item()*poly_eval(self.basis_coeffs[basis_index_local]["f"], point_local)
+                    y[point_index] += coeffs[basis_index_global].item()*poly_eval(self.basis_coeffs[basis_index_local][derivative], point_local)
+                if derivative == "f_x":
+                    y[point_index] /= element_scale
+                if derivative == "f_xx":
+                    y[point_index] /= element_scale**2
+                        
         
         return y
     
@@ -142,7 +148,7 @@ class GalerkinApproximation():
         states = results["x"]
         states_d = results["x_d"]
         states_dd = results["x_dd"]
-        ext_work = [states[0].transpose()@b(t[0])] # assume constant load starting from zero state before the start of the simulation
+        ext_work = [states[0].transpose()@b(states[0][:self.coeffs_len], states[0][self.coeffs_len:], t[0])] # assume constant load starting from zero state before the start of the simulation
         printed_info = False
         for i in range(1, len(states)):
             t_prev = t[i - 1]
@@ -160,7 +166,7 @@ class GalerkinApproximation():
                     logger.info("Inconsistent results with assumption of linear accelerations. Falling back to constant accelerations for computing external work.")
                     printed_info = True
                 x_d = lambda t: x_d_prev + (x_d_next - x_d_prev)*(t - t_prev)/(t_next - t_prev)
-            ext_work.append(ext_work[-1] + quad(lambda t: x_d(t).transpose()@b(t), [t_prev, t_next]))
+            ext_work.append(ext_work[-1] + quad(lambda t: x_d(t).transpose()@b(states[i][:self.coeffs_len], states[i][self.coeffs_len:], t), [t_prev, t_next]))
         results_post["W_ext"] = np.stack(ext_work)
         
         

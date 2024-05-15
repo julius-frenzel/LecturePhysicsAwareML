@@ -53,8 +53,9 @@ class BeamVisualization():
                 keys = [result_key, der_key]
                 interp_functions.update({key: [] for key in keys})
                 for i in range(len(results[result_key])): # iterate over time steps
-                    displacements = approx.eval_solution(results[result_key][i,:], eval_points)
-                    derivatives_x = np.gradient(displacements, eval_points, axis=0)
+                    displacements = approx.eval_solution(results[result_key][i,:], eval_points, "f")
+                    derivatives_x = approx.eval_solution(results[result_key][i,:], eval_points, "f_x")
+                    #derivatives_x = np.gradient(displacements, eval_points, axis=0)
                     interp_functions[result_key].append(displacements)
                     interp_functions[der_key].append(derivatives_x)
                 interp_functions.update({key: np.stack(interp_functions[key]) for key in keys})
@@ -66,7 +67,7 @@ class BeamVisualization():
         
         # ----------plot distributed quantities (displacements, derivatives with respect to x and centerline)----------
 
-        fig, (ax_displacements, ax_derivatives, ax_centerline, ax_slider) = plt.subplots(4, 1, figsize=self.figsizes["beam"], width_ratios=[1], height_ratios=[1, 1, 1, 0.25],
+        fig, (ax_displacements_dyn, ax_derivatives_dyn, ax_centerline, ax_slider) = plt.subplots(4, 1, figsize=self.figsizes["beam"], width_ratios=[1], height_ratios=[1, 1, 1, 0.25],
                                                                                          gridspec_kw={'hspace': 0.35, "top": 0.97, "bottom": 0})
         
         t_min = results["t"].min()
@@ -93,41 +94,41 @@ class BeamVisualization():
             
             
             # plot displacements
-            ylim_old = ax_displacements.get_ylim() if not 1. in ax_displacements.get_ylim() else [-1e-10, 1e-10] # record axes limits before new data is plotted
-            ax_displacements.clear()
-            ax_displacements.plot(eval_points, line_data["u"], "-b")
-            ax_displacements.plot(eval_points, line_data["w"], "-r")
+            ylim_old = ax_displacements_dyn.get_ylim() if not 1. in ax_displacements_dyn.get_ylim() else [-1e-10, 1e-10] # record axes limits before new data is plotted
+            ax_displacements_dyn.clear()
+            ax_displacements_dyn.plot(eval_points, line_data["u"], "-b")
+            ax_displacements_dyn.plot(eval_points, line_data["w"], "-r")
             if results_reference is not None:
-                ax_displacements.plot(eval_points, line_data["u_ref"], "--b")
-                ax_displacements.plot(eval_points, line_data["w_ref"], "--r")
-                ax_displacements.legend(["u", "w", f"u ({ref_label})", f"w ({ref_label})"])
+                ax_displacements_dyn.plot(eval_points, line_data["u_ref"], "--b")
+                ax_displacements_dyn.plot(eval_points, line_data["w_ref"], "--r")
+                ax_displacements_dyn.legend(["u", "w", f"u ({ref_label})", f"w ({ref_label})"])
             else:
-                ax_displacements.legend(["u", "w"])
-            ylim_new = ax_displacements.get_ylim()
-            ax_displacements.set_ylim([min(ylim_old[0], ylim_new[0]), max(ylim_old[1], ylim_new[1])])
-            ax_displacements.set_xlabel("x in m")
-            ax_displacements.set_ylabel("u, w in m")
-            ax_displacements.set_title("displacements")
-            ax_displacements.grid(True)
+                ax_displacements_dyn.legend(["u", "w"])
+            ylim_new = ax_displacements_dyn.get_ylim()
+            ax_displacements_dyn.set_ylim([min(ylim_old[0], ylim_new[0]), max(ylim_old[1], ylim_new[1])])
+            ax_displacements_dyn.set_xlabel("x in m")
+            ax_displacements_dyn.set_ylabel("u, w in m")
+            ax_displacements_dyn.set_title("displacements")
+            ax_displacements_dyn.grid(True)
             
             
             # plot derivatives with respect to x
-            ylim_old = ax_derivatives.get_ylim() if not 1. in ax_derivatives.get_ylim() else [-1e-10, 1e-10] # record axes limits before new data is plotted
-            ax_derivatives.clear()
-            ax_derivatives.plot(eval_points, line_data["u_x"], "-b")
-            ax_derivatives.plot(eval_points, line_data["w_x"], "-r")
+            ylim_old = ax_derivatives_dyn.get_ylim() if not 1. in ax_derivatives_dyn.get_ylim() else [-1e-10, 1e-10] # record axes limits before new data is plotted
+            ax_derivatives_dyn.clear()
+            ax_derivatives_dyn.plot(eval_points, line_data["u_x"], "-b")
+            ax_derivatives_dyn.plot(eval_points, line_data["w_x"], "-r")
             if results_reference is not None:
-                ax_derivatives.plot(eval_points, line_data["u_x_ref"], "--b")
-                ax_derivatives.plot(eval_points, line_data["w_x_ref"], "--r")
-                ax_derivatives.legend(["u_x", "w_x", f"u_x ({ref_label})", f"w_x ({ref_label})"])
+                ax_derivatives_dyn.plot(eval_points, line_data["u_x_ref"], "--b")
+                ax_derivatives_dyn.plot(eval_points, line_data["w_x_ref"], "--r")
+                ax_derivatives_dyn.legend(["u_x", "w_x", f"u_x ({ref_label})", f"w_x ({ref_label})"])
             else:
-                ax_derivatives.legend(["u_x", "w_x"])
-            ylim_new = ax_derivatives.get_ylim()
-            ax_derivatives.set_ylim([min(ylim_old[0], ylim_new[0]), max(ylim_old[1], ylim_new[1])])
-            ax_derivatives.set_xlabel("x in m")
-            ax_derivatives.set_ylabel("u_x, w_x in m/m")
-            ax_derivatives.set_title("derivatives with respect to x")
-            ax_derivatives.grid(True)
+                ax_derivatives_dyn.legend(["u_x", "w_x"])
+            ylim_new = ax_derivatives_dyn.get_ylim()
+            ax_derivatives_dyn.set_ylim([min(ylim_old[0], ylim_new[0]), max(ylim_old[1], ylim_new[1])])
+            ax_derivatives_dyn.set_xlabel("x in m")
+            ax_derivatives_dyn.set_ylabel("u_x, w_x in m/m")
+            ax_derivatives_dyn.set_title("derivatives with respect to x")
+            ax_derivatives_dyn.grid(True)
             
             
             # derivatives with respect to time could be added here
@@ -168,27 +169,26 @@ class BeamVisualization():
         
         # ----------plot timeseries at observation points----------
         if is_dynamic and obs_points is not None:
-            fig_obs, (ax_displacements, ax_derivatives_t) = plt.subplots(2, 1, figsize=self.figsizes["observation_points"], gridspec_kw={'hspace': 0.2, "top": 0.97, "bottom": 0.07})
+            fig_obs, (ax_displacements_t, ax_derivatives_t) = plt.subplots(2, 1, figsize=self.figsizes["observation_points"], gridspec_kw={'hspace': 0.2, "top": 0.97, "bottom": 0.07})
             if eval_times is None:
                 eval_times = np.linspace(results["t"].min(), results["t"].max(), len(eval_points))
             obs_indices = np.argwhere([point in obs_points for point in eval_points])
             
             # plot displacements
             for obs_index in obs_indices:
-                l1 = ax_displacements.plot(eval_times, interp_functions["u"](eval_times)[:,obs_index])[0]
-                print(l1)
-                l2 = ax_displacements.plot(eval_times, interp_functions["w"](eval_times)[:,obs_index])[0]
+                l1 = ax_displacements_t.plot(eval_times, interp_functions["u"](eval_times)[:,obs_index])[0]
+                l2 = ax_displacements_t.plot(eval_times, interp_functions["w"](eval_times)[:,obs_index])[0]
                 if results_reference is not None:
-                    ax_displacements.plot(eval_times, interp_functions["u_ref"](eval_times)[:,obs_index], linestyle="--", color=l1.get_color())
-                    ax_displacements.plot(eval_times, interp_functions["w_ref"](eval_times)[:,obs_index], linestyle="--", color=l2.get_color())
+                    ax_displacements_t.plot(eval_times, interp_functions["u_ref"](eval_times)[:,obs_index], linestyle="--", color=l1.get_color())
+                    ax_displacements_t.plot(eval_times, interp_functions["w_ref"](eval_times)[:,obs_index], linestyle="--", color=l2.get_color())
             if results_reference is not None:
-                ax_displacements.legend([f"{quantity}(t;x={obs_point:.2f}){suffix}" for obs_point in obs_points for suffix in ["", f" ({ref_label})"] for quantity in ["u", "w"]])
+                ax_displacements_t.legend([f"{quantity}(t;x={obs_point:.2f}){suffix}" for obs_point in obs_points for suffix in ["", f" ({ref_label})"] for quantity in ["u", "w"]])
             else:
-                ax_displacements.legend([f"{quantity}(t;x={obs_point:.2f})" for obs_point in obs_points for quantity in ["u", "w"]])
-            ax_displacements.set_xlabel("t in s")
-            ax_displacements.set_ylabel("u, w in m")
-            ax_displacements.set_title("displacements")
-            ax_displacements.grid(True)
+                ax_displacements_t.legend([f"{quantity}(t;x={obs_point:.2f})" for obs_point in obs_points for quantity in ["u", "w"]])
+            ax_displacements_t.set_xlabel("t in s")
+            ax_displacements_t.set_ylabel("u, w in m")
+            ax_displacements_t.set_title("displacements")
+            ax_displacements_t.grid(True)
             
             # plot derivatives with respect to time
             for obs_index in obs_indices:

@@ -34,12 +34,12 @@ load_q = 1e-2; %-9.81*RA;
 load = @(x) [load_f, load_q];               
 
 % Point forces at points [1,2,3,4]*L/4 [N]
-Nx = [0 0 0 0];
-Qz = [0 0 0 0];  
-My = 0; %-2;                % Moment at x=L [Nm]
+Nx = [0 1 0 1e-2];
+Qz = [0 0 0 1e-2];  
+My = 1e-2; %-2;                % Moment at x=L [Nm]
 
 % Number of finite elements
-ne = 1*4;       
+ne = 2*4;       
 
 % Newton-Raphson parameters
 rnMax = 50;     % Max. no. of iterations
