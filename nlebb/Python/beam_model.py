@@ -228,7 +228,6 @@ def get_rhs_w(coeffs_u, coeffs_w, approx, domain, t=0):
     b = np.zeros((approx.coeffs_len,))
     replace_row_mask = np.zeros_like(b, dtype=np.bool_)
     for e in range(domain["num_elements"]):
-        print(f"e={e}")
         index_global_left = e*int(approx.coeffs_per_element/2) # global index for basis / test functions at the left side of the element
         left_boundary = domain["element_boundaries"][e]
         right_boundary = domain["element_boundaries"][e + 1]

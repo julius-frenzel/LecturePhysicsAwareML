@@ -15,9 +15,15 @@ matplotlib.rcParams["figure.raise_window"] = False # disable raising windows, wh
 logger = logging.getLogger(__name__)
 
 class GalerkinApproximation():
-    def __init__(self, domain, poly_basis):
+    def __init__(self, domain):
         self.domain = domain
         
+        # define polynomial basis functions (will be evaluated between 0 and 1 / equal to test functions, because the Galerkin method is used)
+        # the coefficients must be exactly representable using machine numbers, so that the polynomials can be evaluated without rounding errors at the boundaries
+        poly_basis = np.array([[1, 0, -3, 2],
+                               [0, 1, -2, 1],
+                               [0, 0, 3, -2],
+                               [0, 0, -1, 1]])
         # precompute coefficients for the derivatives of the basis functions
         self.basis_coeffs = [{"f": poly_basis[i], "f_x": poly_der(poly_basis[i], 1), "f_xx": poly_der(poly_basis[i], 2)} for i in range(len(poly_basis))]
         self.basis_evaluated = []

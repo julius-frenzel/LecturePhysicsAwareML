@@ -19,11 +19,11 @@ class BeamVisualization():
                          "energies": (8, 6)}
     
     
-    def visualize(self, approx, eval_points, results, results_reference=None, obs_points=None, eval_times=None, blocking=True):
+    def visualize(self, approx, results, results_reference=None, obs_points=None, eval_times=None, num_eval_points=100, blocking=True):
         """"visualizes the results of static and/or dynamic FEM simulations
             
             approx: object of type GalerkinApproximation
-            eval_points: 1D array with points along the beam, at which the solution is to be evaluated
+            num_eval_points: number of points along the beam, at which the solution is to be evaluated
             results: solution in the form of a dictionary with fields for each quantity, contains the coefficients for the basis according to approx
             results_reference (optional): static reference solutions, which are plottet in case of a dynamic simulation
             obs_points (optional): observation points along the beam, at which displacements and derivatives over time are to be plottet
@@ -34,8 +34,10 @@ class BeamVisualization():
         is_dynamic = len(results["u"]) > 1 # determine whether there is more than one set of coefficients in the results
         ref_label = "static" # meaning of reference values
         
-        # ----------preprocessing (get physical displacements from coefficients / interpolate between time steps)----------
-        # add obs points to eval_points
+        # ----------preprocessing (compute evaluation points / get physical displacements from coefficients / interpolate between time steps)----------
+        # compute evaluation points
+        eval_points = np.linspace(0, approx.domain["l"], num_eval_points)
+        # add observation points to eval_points
         if obs_points is not None:
             eval_points = np.sort(np.unique(np.concatenate([eval_points, obs_points])))
         # integrate reference into results

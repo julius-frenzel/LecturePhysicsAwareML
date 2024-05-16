@@ -12,7 +12,6 @@ import sys
 
 # ----------findings----------
 # Hermite splines can only accurately approximate solutions, which are twice continuously differentiable, otherwise the approximation will be "too smooth" at some points
-# (dictionary lookups might be inefficient)
 
 # logging setup
 logger = logging.getLogger()
@@ -27,7 +26,7 @@ logger.addHandler(stream_handler)
 
 # define domain (describes the domain, in which the problem is to be solved)
 l = 1 # length of the beam
-num_elements = 8
+num_elements = 16
 domain = {"l": l,
         "num_elements": num_elements,
         "element_boundaries": np.linspace(0, l, num_elements+1),
@@ -45,31 +44,21 @@ domain = {"l": l,
 # check whether the beam is statically determinate with the given boundary conditions
 check_determinacy(domain["boundary_conds"])
 
-# define polynomial basis functions (will be evaluated between 0 and 1 / equal to test functions, because the Galerkin method is used)
-# the coefficients must be exactly representable using machine numbers, so that the polynomials can be evaluated without rounding errors at the boundaries
-poly_basis = np.array([[1, 0, -3, 2],
-                       [0, 1, -2, 1],
-                       [0, 0, 3, -2],
-                       [0, 0, -1, 1]])
+observation_points = np.array([domain["l"]/2, domain["l"]]) # points along the beam, at which the solution is plotted over time
 
-# object, which holds an approximate solution to the problem
-approx = GalerkinApproximation(domain, poly_basis)
+# object, which allows computing approximate solutions to the problem
+approx = GalerkinApproximation(domain)
 
-
-num_eval_points = 100
-eval_points = np.linspace(0, domain["l"], num_eval_points)
-
+# object, which allows visualizing the solution
 beamVisualization = BeamVisualization(time_scaling_factor=0.1)
 
+# solve static problem and visualize the solution
 results_static = approx.solve_static(t=0)
+beamVisualization.visualize(approx, results_static, blocking=True)
 
-beamVisualization.visualize(approx, eval_points, results_static, blocking=True)
-
-observation_points = np.array([domain["l"]/2, domain["l"]])
-t = np.linspace(0,1,15)
-results_dynamic, results_static = approx.solve_dynamic(t, static_reference=True)
-
-beamVisualization.visualize(approx, eval_points, results_dynamic, results_static, observation_points)
+# solve dynamic problem and visualize the solution
+results_dynamic, results_static = approx.solve_dynamic(t=np.linspace(0,1,15), static_reference=True)
+beamVisualization.visualize(approx, results_dynamic, results_static, observation_points)
 
 
 
