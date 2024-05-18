@@ -64,7 +64,7 @@ beamVisualization.visualize(approx, results_dynamic, results_static, observation
 # ---------- perform Proper Orthogonal Decomposition----------
 
 num_snapshots = np.inf # maximum number of snapshots, which are chosen equidistantly from the available time steps
-sv_num = 5 # number of singular values to use
+sv_num = 10 # number of singular values to use
 
 def snaphsots_from_results(results):
     # get snapshot matrix from simulation results
