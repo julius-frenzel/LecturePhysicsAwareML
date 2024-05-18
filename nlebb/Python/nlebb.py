@@ -3,7 +3,6 @@ import time
 from galerkin_approximation import GalerkinApproximation
 from visualization import BeamVisualization
 from helper import check_determinacy
-from beam_model import get_force_vector_u, get_force_vector_w, get_rhs_u
 import matplotlib.pyplot as plt
 import logging
 import sys
@@ -21,8 +20,6 @@ stream_handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s | %(filename)25s | %(levelname)7s | %(message)s', datefmt='%H:%M:%S')
 stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
-
-# !!!!!!!!!!!!!!!!!!!implement MOR based on observations!!!!!!!!!!!!!!!!!!!!!
 
 # define domain (describes the domain, in which the problem is to be solved)
 l = 1 # length of the beam
@@ -54,7 +51,7 @@ beamVisualization = BeamVisualization(time_scaling_factor=0.1)
 
 # solve static problem and visualize the solution
 results_static = approx.solve_static(t=0)
-beamVisualization.visualize(approx, results_static, blocking=True)
+beamVisualization.visualize(approx, results_static, blocking=False)
 
 # solve dynamic problem and visualize the solution
 results_dynamic, results_static = approx.solve_dynamic(t=np.linspace(0,1,15), static_reference=True)

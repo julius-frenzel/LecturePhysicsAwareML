@@ -36,51 +36,74 @@ class GalerkinApproximation():
         self.coeffs_len = (domain["num_elements"] + 1)*int(len(self.basis_coeffs)/2) # length of the vector of coefficients, which describes the solution
         
     
-    def solve_static(self, t=0):
+    def solve_static(self, t=0, Q=None):
         t_start = time.time()
+        
+        # define Q as unit matrix, if no reduced basis is used
+        if Q is None:
+            Q = np.eye(2*self.coeffs_len)
+        coeffs_len_reduced2 = Q.shape[1]
+        #print(Q.shape)
+        #print(np.zeros((coeffs_len_reduced2,)).shape)
+        #print(Q @ np.zeros((coeffs_len_reduced2,)))
+        
         # assemble right hand side
-        b = lambda coeffs_u, coeffs_w: np.concatenate([get_rhs_u(coeffs_u, coeffs_w, self, self.domain, t),
-                                                       get_rhs_w(coeffs_u, coeffs_w, self, self.domain, t)])
+        b = lambda coeffs_u, coeffs_w: Q.transpose() @ np.concatenate([get_rhs_u(coeffs_u, coeffs_w, self, self.domain, t),
+                                                                       get_rhs_w(coeffs_u, coeffs_w, self, self.domain, t)])
         # function for assembling force vector
-        force_vector = lambda coeffs_u, coeffs_w: np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
-                                                                  get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
+        force_vector = lambda coeffs_u, coeffs_w: Q.transpose() @ np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
+                                                                                  get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
         # define residual
-        residual = lambda coeffs: force_vector(coeffs[:self.coeffs_len], coeffs[self.coeffs_len:]) - b(coeffs[:self.coeffs_len], coeffs[self.coeffs_len:])
+        residual = lambda coeffs: force_vector((Q @ coeffs)[:self.coeffs_len], (Q @ coeffs)[self.coeffs_len:]) - b((Q @ coeffs)[:self.coeffs_len], (Q @ coeffs)[self.coeffs_len:])
         # solve problem
-        #result = newton(residual, np.zeros((2*self.coeffs_len,)), tol=1e-5, maxiter=10) # own implementation (slower)
-        result = root(residual, np.zeros((2*self.coeffs_len,)), method="hybr", tol=1e-10, options={"maxfev": 1000})["x"] # solver from scipy (faster)
+        #result = newton(residual, np.zeros((coeffs_len_reduced2,)), tol=1e-5, maxiter=10) # own implementation (slower)
+        result = root(residual, np.zeros((coeffs_len_reduced2,)), method="hybr", tol=1e-10, options={"maxfev": 1000})["x"] # solver from scipy (faster)
+        result = result.reshape(1,-1) # add time dimension
         # fomat results
-        coeffs_u = result[:self.coeffs_len]
-        coeffs_w = result[self.coeffs_len:]
+        result = (Q @ result.transpose()).transpose()
+        coeffs_u = result[:,:self.coeffs_len]
+        coeffs_w = result[:,self.coeffs_len:]
         results = {"t": np.array([t]), "u": np.stack([coeffs_u]), "w": np.stack([coeffs_w])}
         
         logger.info(f"time for solving static problem: {time.time() - t_start:.2f}s")
         
-        result = result.reshape(1,-1) # add time dimension for postprocessing
-        results.update(self.postprocessing({"x": result, "x_d": np.zeros_like(result), "x_dd": np.zeros_like(result)}, lambda coeffs_u, coeffs_w, t: b(coeffs_u, coeffs_w), np.array([t]), silent=True))
+        #print((Q @ result).shape)
+        #result = result.reshape(1,-1) # add time dimension for postprocessing
+        #print(results)
+        #time.sleep(100)
+        results.update(self.postprocessing({"x": result, "x_d": np.zeros_like(result), "x_dd": np.zeros_like(result)}, lambda coeffs_u, coeffs_w, t: Q @ b(coeffs_u, coeffs_w), np.array([t]), silent=True))
         
         return results
     
     
-    def solve_dynamic(self, t, static_reference=False):
+    def solve_dynamic(self, t, Q=None, static_reference=False):
         t_start_dynamic_total = time.time()
+        
+        # define Q as unit matrix, if no reduced basis is used
+        if Q is None:
+            Q = np.eye(2*self.coeffs_len)
+        coeffs_len_reduced2 = Q.shape[1]
+        
         # assemble mass matrix
         M_u = get_mass_matrix_u(self, self.domain)
         M_w = get_mass_matrix_w(self, self.domain)
-        M = np.block([[M_u,                     np.zeros_like(M_u)],
-                      [np.zeros_like(M_w),      M_w]])
+        M = Q.transpose() @ np.block([[M_u,                     np.zeros_like(M_u)],
+                                      [np.zeros_like(M_w),      M_w]]) @ Q
         # assemble right hand side
-        b = lambda coeffs_u, coeffs_w, t: np.concatenate([get_rhs_u(coeffs_u, coeffs_w, self, self.domain, t),
-                                                          get_rhs_w(coeffs_u, coeffs_w, self, self.domain, t)])
+        b = lambda coeffs_u, coeffs_w, t: Q.transpose() @ np.concatenate([get_rhs_u(coeffs_u, coeffs_w, self, self.domain, t),
+                                                                          get_rhs_w(coeffs_u, coeffs_w, self, self.domain, t)])
         # function for assembling force vector
-        force_vector = lambda coeffs_u, coeffs_w: np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
-                                                                  get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
+        force_vector = lambda coeffs_u, coeffs_w: Q.transpose() @ np.concatenate([get_force_vector_u(coeffs_u, coeffs_w, self, self.domain),
+                                                                                  get_force_vector_w(coeffs_u, coeffs_w, self, self.domain)])
         # define residual
-        residual = lambda x_np1, x_d_np1, x_dd_np1, t: M@x_dd_np1 + force_vector(x_np1[:self.coeffs_len], x_np1[self.coeffs_len:]) - b(x_np1[:self.coeffs_len], x_np1[self.coeffs_len:], t)
+        residual = lambda x_np1, x_d_np1, x_dd_np1, t: M@x_dd_np1 + force_vector((Q @ x_np1)[:self.coeffs_len], (Q @ x_np1)[self.coeffs_len:]) - b((Q @ x_np1)[:self.coeffs_len], (Q @ x_np1)[self.coeffs_len:], t)
         
         # perform time integration
-        newmark_results = newmark(residual, t, x_0=np.zeros(2*self.coeffs_len), x_d_0=np.zeros(2*self.coeffs_len), x_dd_0=np.zeros(2*self.coeffs_len))
-        # format results (split into u and w)
+        newmark_results = newmark(residual, t, x_0=np.zeros(coeffs_len_reduced2), x_d_0=np.zeros(coeffs_len_reduced2), x_dd_0=np.zeros(coeffs_len_reduced2))
+        # format results (transform into physical coordinates and split into u and w)
+        for result_key in newmark_results:
+            if not result_key == "t":
+                newmark_results[result_key] = (Q @ newmark_results[result_key].transpose()).transpose()
         results_dynamic = {"t": t,
                            "u": newmark_results["x"][:,:self.coeffs_len],
                            "u_d": newmark_results["x_d"][:,:self.coeffs_len],
@@ -92,12 +115,12 @@ class GalerkinApproximation():
         logger.info(f"time for solving dynamic problem: {time.time() - t_start_dynamic_total:.2f}s")
         
         # postprocessing for dynamic results
-        results_dynamic.update(self.postprocessing(newmark_results, b, t))
+        results_dynamic.update(self.postprocessing(newmark_results, lambda coeffs_u, coeffs_w, t: Q @ b(coeffs_u, coeffs_w, t), t))
         
         logger.info("computing static reference solutions")
         results_static = dict()
         for t_i in t:
-            result_static = self.solve_static(t_i)
+            result_static = self.solve_static(t_i, Q)
             for key in result_static:
                 if not key in results_static:
                     results_static[key] = [result_static[key]]

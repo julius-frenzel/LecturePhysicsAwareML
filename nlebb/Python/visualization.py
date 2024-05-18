@@ -228,6 +228,7 @@ class BeamVisualization():
         if blocking:
             plt.show()
         else:
+            update(t_max) # make sure that the last point in time is displayed at the end
             plt.pause(2)
 
 
