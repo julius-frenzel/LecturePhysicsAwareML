@@ -93,7 +93,7 @@ while True:
     
     # visualize progress
     if epoch_index % 100 == 0:
-        print(f"epoch {epoch_index+1}: loss={loss_total}")
+        print(f"epoch {epoch_index+1}: loss={loss_total.item():.2e}")
         
         axs[0].clear()
         x_plot = np.linspace(x.min(), x.max(), 1000)
