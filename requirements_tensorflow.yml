@@ -1,0 +1,7 @@
+name: paml_env_tensorflow
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - tensorflow
+  - matplotlib

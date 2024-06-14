@@ -29,14 +29,14 @@ domain = {"l": l,
         "element_boundaries": np.linspace(0, l, num_elements+1),
         "boundary_conds": [4, 0], # what kind of boundary conditions to use at the ends of the beam (0: free, 1: pinned in vertical direction, 2: pinned in horizontal direction, 3: pinned in both directions, 4: clamped)
         "load_points": lambda t: [0, l/2, l], # points, at which discrete external loads are applied
-        "N": lambda t: [0, 1, 1e-2], # axial force at load points in N (applying to internal points leeds to solutions with discontinuous derivatives, which can't be represented exactly using Hermite splines)
-        "Q": lambda t: [0, 0, 1e-2], # lateral force at load points in N
-        "M": lambda t: [0, 0, 1e-2], # moment at load points in Nm
+        "N": lambda t: [0, 0, 0], # axial force at load points in N (applying to internal points leeds to solutions with discontinuous derivatives, which can't be represented exactly using Hermite splines)
+        "Q": lambda t: [0, 0, 0], # lateral force at load points in N
+        "M": lambda t: [0, 0, 0.1], # moment at load points in Nm
         "u": [0, 0], # axial displacement for pinned and clamped boundary conditions
         "w": [0, 0], # lateral displacement for pinned and clamped boundary conditions
         "w_x": [0, 0], # derivatiive of lateral displacement for clamped boundary conditions
-        "f": lambda t, x: 1e-2, # specific axial force as a function of the position along the beam
-        "q": lambda t, x: 1e-2} # specific lateral force as a function of the position along the beam (gravity: q = -A*g)
+        "f": lambda t, x: 0, # specific axial force as a function of the position along the beam
+        "q": lambda t, x: 0} # specific lateral force as a function of the position along the beam (gravity: q = -A*g)
 
 # check whether the beam is statically determinate with the given boundary conditions
 check_determinacy(domain["boundary_conds"])
