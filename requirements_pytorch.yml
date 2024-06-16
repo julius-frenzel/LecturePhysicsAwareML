@@ -2,11 +2,13 @@ name: paml_env_pytorch
 channels:
   - defaults
   - pytorch
-  #- nvidia
+  - nvidia # only if CUDA support is required
 dependencies:
   - python=3.10
   - pytorch
   - torchvision
   - torchaudio
-  #- pytorch-cuda=11.8
+  - pytorch-cuda=11.8 # only if CUDA support is required
   - matplotlib
+  - ipympl # for using Matplotlib in Jupyter notebooks
+  - ipykernel # for creating kernels for Jupyter notebooks
